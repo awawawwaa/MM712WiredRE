@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MM712 Control</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --panel2: #23272f; --line: #2c313a;
+    --fg: #dfe3ea; --dim: #8b93a1;
+    --ok: #4ec9a0; --warn: #e2b341; --bad: #e06c6c; --accent: #6aa5ff;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px 16px 60px; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; margin-bottom: 4px; }
+  h1 { font-size: 19px; margin: 0; }
+  .sub { color: var(--dim); font-size: 13px; margin: 0 0 18px; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+
+  button {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0b1220; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.1); }
+  button:disabled { opacity: .45; cursor: default; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+  .panel > h2 { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin: 0 0 12px; }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .grow { flex: 1 1 auto; }
+
+  .status { font-size: 13px; }
+  .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); margin-right: 6px; vertical-align: middle; }
+  .status.on  .dot { background: var(--ok); }
+  .status.err .dot { background: var(--bad); }
+
+  table.stages { border-collapse: collapse; width: 100%; }
+  table.stages th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); text-align: left; font-weight: 600; padding: 0 8px 8px 0; }
+  table.stages td { padding: 5px 8px 5px 0; border-top: 1px solid var(--line); }
+  table.stages tr.active td { background: #6aa5ff14; }
+  input[type=number] {
+    width: 92px; background: var(--bg); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 5px; padding: 6px 8px; font: inherit; font-family: ui-monospace, Consolas, monospace;
+  }
+  input[type=number]:focus { outline: none; border-color: var(--accent); }
+  input[type=number]:disabled { opacity: .4; }
+  input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 15px; height: 15px; }
+  .raw { color: var(--dim); font-size: 12px; }
+
+  .opts { display: flex; flex-wrap: wrap; gap: 22px; }
+  .opt strong { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); margin-bottom: 7px; font-weight: 600; }
+  .opt label { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
+
+  select {
+    background: var(--bg); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 5px; padding: 7px 9px; font: inherit;
+  }
+  select:disabled { opacity: .4; }
+  input[type=range] { accent-color: var(--accent); width: 180px; vertical-align: middle; }
+  input[type=range]:disabled { opacity: .35; }
+  input[type=color] {
+    width: 40px; height: 32px; padding: 2px; border: 1px solid var(--line);
+    border-radius: 5px; background: var(--bg); cursor: pointer; vertical-align: middle;
+  }
+  input[type=color]:disabled { opacity: .35; cursor: default; }
+  .rgbRow { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-end; }
+  .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); margin-bottom: 7px; font-weight: 600; }
+  .field .val { color: var(--dim); font-size: 12px; margin-left: 8px; font-family: ui-monospace, Consolas, monospace; }
+  .rgbDisabledNote { color: var(--dim); font-size: 13px; margin: 4px 0 0; }
+
+  #log {
+    background: #0f1115; border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px; max-height: 260px; overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.5;
+  }
+  #log div { white-space: pre; }
+  #log .out { color: var(--accent); }
+  #log .in  { color: var(--ok); }
+  #log .err { color: var(--bad); }
+  #log .note { color: var(--dim); }
+  #log:empty::after { content: 'No traffic yet.'; color: var(--dim); }
+
+  .notice { border: 1px solid; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px; }
+  .notice.warn { border-color: var(--warn); background: #e2b34114; }
+  .notice.bad  { border-color: var(--bad);  background: #e06c6c14; }
+  .hide { display: none; }
+  @media (max-width: 560px) { .raw { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>MM712 Control</h1>
+    <span class="grow"></span>
+    <span class="status" id="status"><span class="dot"></span><span id="statusText">Disconnected</span></span>
+  </header>
+  <p class="sub">Cooler Master MM712 wired (3395 version). Talks straight to the mouse over WebHID &mdash; no driver, no vendor software.</p>
+
+  <div class="notice bad hide" id="unsupported">
+    <b>WebHID is unavailable in this browser.</b> Use Chrome, Edge or another Chromium browser,
+    served over <code>http://localhost</code> or <code>https://</code>.
+  </div>
+
+  <div class="panel">
+    <div class="bar">
+      <button class="primary" id="connect">Connect</button>
+      <button id="reload" disabled>Re-read from mouse</button>
+      <span class="grow"></span>
+      <span class="raw" id="devName"></span>
+    </div>
+  </div>
+
+  <div id="ui" class="hide">
+    <div class="panel">
+      <h2>DPI stages</h2>
+      <table class="stages">
+        <thead>
+          <tr><th style="width:52px">Active</th><th style="width:52px">On</th><th>Stage</th><th>DPI</th><th class="raw">Raw</th></tr>
+        </thead>
+        <tbody id="stages"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Performance</h2>
+      <div class="opts">
+        <div class="opt">
+          <strong>Polling rate</strong>
+          <label><input type="radio" name="poll" value="1"> 1000 Hz</label>
+          <label><input type="radio" name="poll" value="2"> 500 Hz</label>
+          <label><input type="radio" name="poll" value="4"> 250 Hz</label>
+          <label><input type="radio" name="poll" value="8"> 125 Hz</label>
+        </div>
+        <div class="opt">
+          <strong>Lift-off distance</strong>
+          <label><input type="radio" name="lod" value="0"> Low</label>
+          <label><input type="radio" name="lod" value="1"> High</label>
+        </div>
+      </div>
+      <p class="raw" style="margin:12px 0 0">
+        No Debounce Time/Button Response Time control here on purpose: setting it in
+        Cooler Master's own software doesn't survive a power cycle &mdash; it's back
+        to the 6&nbsp;ms default every time, on every value tried. It does nothing,
+        so there's nothing for this webapp to set either. See the README for the
+        capture that showed this.
+      </p>
+    </div>
+
+    <div class="panel">
+      <div class="bar">
+        <button class="primary" id="apply">Write all settings</button>
+        <button id="switch">Switch active stage only</button>
+        <span class="grow"></span>
+        <span class="raw" id="applyNote"></span>
+      </div>
+      <p class="raw" style="margin:10px 0 0">
+        <b>Write all settings</b> sends every stage's DPI/enabled state, the active
+        stage, and the polling rate &mdash; use this after editing any DPI value,
+        enabling/disabling a stage, or changing polling/LOD.<br>
+        <b>Switch active stage only</b> sends one packet that just changes which
+        stage is active. It does <i>not</i> write DPI edits or the polling rate
+        &mdash; the mouse keeps whatever those were set to on its last full write.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>RGB</h2>
+      <div class="rgbRow">
+        <div class="field">
+          <label for="rgbEffect">Effect</label>
+          <select id="rgbEffect">
+            <option value="1">Breathing</option>
+            <option value="0">Static</option>
+            <option value="254">Off</option>
+          </select>
+        </div>
+        <div class="field" id="rgbSpeedLevelField">
+          <label for="rgbSpeedLevel">Speed</label>
+          <select id="rgbSpeedLevel">
+            <option value="1">1 (slowest)</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5 (fastest)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="rgbBrightness">Brightness</label>
+          <input type="range" id="rgbBrightness" min="0" max="255" step="1">
+          <span class="val" id="rgbBrightnessVal"></span>
+        </div>
+        <div class="field">
+          <label for="rgbColor">Color</label>
+          <input type="color" id="rgbColor">
+        </div>
+      </div>
+      <p class="rgbDisabledNote hide" id="rgbDisabledNote"></p>
+      <div class="bar" style="margin-top:14px">
+        <button class="primary" id="applyRgbBtn">Write RGB</button>
+        <span class="grow"></span>
+        <span class="raw" id="rgbNote"></span>
+      </div>
+      <p class="raw" style="margin:10px 0 0">
+        Static has no speed control &mdash; Cooler Master's own software only
+        exposes color and brightness for it, matching what's offered here. Off
+        has no adjustable parameters at all. Color Cycle, Electric Slide,
+        Trigger/Click and Custom were explored during reverse-engineering (see
+        the README) but misbehaved when driven live from this webapp, so they
+        were removed rather than shipped half-working.
+      </p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Packet log</h2>
+    <div id="log"></div>
+    <div class="bar" style="margin-top:10px">
+      <button id="clearLog">Clear</button>
+      <span class="raw">Every 64-byte report, trailing zero padding trimmed.</span>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+/* ---------- protocol constants (see ../README.md) ---------- */
+
+const VID = 0x2516, PID = 0x01DF;
+const PKT = 64;                 // every transfer is exactly 64 bytes
+const STAGES = 7;               // stage records 0x00..0x06
+const DPI_STEP = 50, DPI_MIN = 50, DPI_MAX = 26000;
+
+const OP_SET = 0x51, OP_GET = 0x52;
+const SUB_DPI = 0x41, SUB_POLL = 0xf0, SUB_BLOCK9C = 0x9c, SUB_STATUS = 0x10;
+const SUB_RGB_EFFECT = 0x28, SUB_RGB_PARAMS = 0x2b;
+
+// Effect ids named from captures/mm712-wired-rgbmode-...pcapng and
+// rgb-from-breathing-to-static.pcapng. Color Cycle (0x02), Electric Slide
+// (0x04), Trigger/Click (0x05) and Custom (0xb0) are decoded in the README
+// but deliberately not offered here - they misbehaved when driven live from
+// this webapp. 0x03 exists on the wire in neither capture and has no name.
+const RGB_EFFECTS = [
+  { id: 0x01, name: 'Breathing' },
+  { id: 0x00, name: 'Static' },
+  { id: 0xfe, name: 'Off' },
+];
+const RGB_EFFECT_OFF = 0xfe;
+// These are the only effects offered here that store a 0x2b parameter record.
+const RGB_PARAM_EFFECTS = [0x01, 0x00];
+// Confirmed on Breathing only (rgb-speed-from3of5-...pcapng, both captures).
+// Static has no speed control in Cooler Master's own software.
+const RGB_SPEED_LEVELS = { 1: 0x3c, 2: 0x37, 3: 0x31, 4: 0x2c, 5: 0x26 };
+// Byte 6 (still-unknown field) defaults, used only if the device's own
+// record can't be read: 0x20 for Breathing (startup enumeration), 0x00 for
+// Static (rgb-from-breathing-to-static.pcapng).
+const RGB_BYTE6_DEFAULT = { 0x01: 0x20, 0x00: 0x00 };
+
+const SEL_STAGE = 0x00;         // byte 3: per-stage record
+const SEL_ACTIVE = 0xff;        // byte 3: active-stage record
+
+const B_ENABLED = 10, BIT_ENABLED = 0x08;   // 0xf8 on / 0xf0 off
+const B_LOD = 11,     BIT_LOD_HIGH = 0x40;  // 0x4f high / 0x0f low
+const B_DPI_X = 14, B_DPI_Y = 16;           // LE16 each
+
+const rawToDpi = raw => (raw + 1) * DPI_STEP;
+const dpiToRaw = dpi => Math.round(dpi / DPI_STEP) - 1;
+
+// Written verbatim by MasterPlus in every apply cycle; byte-identical in all
+// eight captures. Used only if the device will not let us read it back.
+const BLOCK_9C_FALLBACK = [
+  0x51, 0x9c, 0x00, 0x00, 0xe7, 0xcc, 0x00, 0x00, 0x00, 0xff, 0xf0, 0x00,
+  0xff, 0x00, 0xff, 0x00, 0x00, 0xe0, 0xff, 0xff, 0x75, 0x00, 0xff,
+];
+
+const pkt = (...bytes) => { const b = new Uint8Array(PKT); b.set(bytes); return b; };
+
+/* ---------- transport ---------- */
+
+let device = null;      // the HIDDevice we drive
+let reportId = 0;       // 0 = device uses no report IDs
+let pending = null;     // resolver for the in-flight request
+let lastSentOp = null;  // byte 0 of the request `pending` is waiting on
+
+// The mouse also emits unsolicited status/heartbeat reports on the same IN
+// endpoint (opcode 0x43, roughly every ~100 ms) that are NOT a reply to
+// anything we sent. None of our commands use this opcode, so filtering on it
+// is enough to tell a real reply from a heartbeat.
+const ASYNC_OPS = new Set([0x43]);
+
+function reportBytes(r) {
+  let bits = 0;
+  for (const it of r.items) bits += (it.reportSize || 0) * (it.reportCount || 0);
+  return Math.ceil(bits / 8);
+}
+
+// Chromium refuses these top-level usages outright.
+const blockedUsage = c => c.usagePage === 0x01 && [0x02, 0x06, 0x07, 0x08, 0x80].includes(c.usage);
+
+// Pick the collection carrying the 64-byte interrupt IN/OUT pair.
+function findEndpoint(devices) {
+  for (const dev of devices) {
+    for (const col of dev.collections) {
+      if (blockedUsage(col)) continue;
+      const o = (col.outputReports || []).find(r => Math.abs(reportBytes(r) - PKT) <= 1);
+      const i = (col.inputReports  || []).find(r => Math.abs(reportBytes(r) - PKT) <= 1);
+      if (o && i) return { dev, reportId: o.reportId };
+    }
+  }
+  return null;
+}
+
+function onInputReport(ev) {
+  const d = ev.data;
+  const bytes = new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
+
+  // A report only counts as the reply to our last send if its opcode matches
+  // what we sent (the device fills in some bytes, e.g. active stage, but byte
+  // 0 is always echoed unchanged) and it isn't a known async opcode. Anything
+  // else is unsolicited traffic (the heartbeat) and must NOT resolve the
+  // pending transfer, or every reply after it shifts by one.
+  const isReply = pending && !ASYNC_OPS.has(bytes[0]) && bytes[0] === lastSentOp;
+
+  log(isReply ? 'in' : 'async', bytes);
+  if (isReply) { const p = pending; pending = null; p.resolve(bytes); }
+}
+
+// Send one 64-byte packet and wait for the device's echo. That echo is the ACK,
+// so requests are strictly serialised.
+function xfer(bytes, { timeout = 2000 } = {}) {
+  if (!device) throw new Error('not connected');
+  if (pending) throw new Error('a transfer is already in flight');
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pending = null;
+      reject(new Error('timed out waiting for the device to reply'));
+    }, timeout);
+
+    lastSentOp = bytes[0];
+    pending = {
+      resolve: v => { clearTimeout(timer); resolve(v); },
+    };
+
+    log('out', bytes);
+    device.sendReport(reportId, bytes).catch(err => {
+      clearTimeout(timer); pending = null;
+      reject(new Error('sendReport failed: ' + err.message));
+    });
+  });
+}
+
+/* ---------- config model ---------- */
+
+// Raw 64-byte stage records exactly as the device returned them. Edits patch
+// only the bytes we understand, so unknown fields survive a write untouched.
+let stageRaw = [];
+let state = { active: 0, stageCount: STAGES, polling: 1, lodHigh: false, block9c: null };
+
+// RGB: params cached per effect id, exactly as MasterPlus itself pre-fetches
+// every effect's 0x2b record at startup rather than reading on demand.
+let rgbActive = 0x01;
+let rgbParams = {};   // effect id -> { speed, byte6, brightness, r, g, b }
+
+async function readAll() {
+  await xfer(pkt(0x41, 0x80));                       // ping
+
+  stageRaw = [];
+  for (let i = 0; i < STAGES; i++) {
+    stageRaw.push(await xfer(pkt(OP_GET, SUB_DPI, i)));
+  }
+
+  const act = await xfer(pkt(OP_GET, SUB_DPI, 0x00, SEL_ACTIVE));
+  state.active = act[4];
+  state.stageCount = act[5] || STAGES;
+
+  const poll = await xfer(pkt(OP_GET, SUB_POLL));
+  state.polling = poll[4] || 1;
+
+  // LOD is a bit inside every stage record; stage 0 is as good as any.
+  state.lodHigh = !!(stageRaw[0][B_LOD] & BIT_LOD_HIGH);
+
+  // This block is never read by MasterPlus, so the read may not be supported.
+  try {
+    const b = await xfer(pkt(OP_GET, SUB_BLOCK9C), { timeout: 800 });
+    state.block9c = (b[1] === SUB_BLOCK9C) ? b : null;
+    if (!state.block9c) note('0x9c read returned something unexpected; will write the captured constant');
+  } catch {
+    state.block9c = null;
+    note('0x9c is not readable; will write the captured constant');
+  }
+
+  const eff = await xfer(pkt(OP_GET, SUB_RGB_EFFECT));
+  rgbActive = eff[4];
+
+  rgbParams = {};
+  for (const id of RGB_PARAM_EFFECTS) {
+    const p = await xfer(pkt(OP_GET, SUB_RGB_PARAMS, 0x00, 0x00, id));
+    if (p[1] === SUB_RGB_PARAMS && p[4] === id) {
+      rgbParams[id] = { speed: p[5], byte6: p[6], brightness: p[9], r: p[10], g: p[11], b: p[12] };
+    }
+  }
+}
+
+// Params for the currently-selected effect, with sane fallbacks if the read
+// at connect somehow didn't return a usable record for it.
+function rgbParamsFor(id) {
+  return rgbParams[id] || {
+    speed: RGB_SPEED_LEVELS[3], byte6: RGB_BYTE6_DEFAULT[id] ?? 0x20,
+    brightness: 0xff, r: 0xf0, g: 0x00, b: 0xff,
+  };
+}
+
+function stageView(i) {
+  const r = stageRaw[i];
+  const raw = r[B_DPI_X] | (r[B_DPI_X + 1] << 8);
+  return { raw, dpi: rawToDpi(raw), enabled: !!(r[B_ENABLED] & BIT_ENABLED) };
+}
+
+function patchStage(i, { dpi, enabled, lodHigh }) {
+  const r = stageRaw[i];
+  if (enabled !== undefined) {
+    r[B_ENABLED] = enabled ? (r[B_ENABLED] | BIT_ENABLED) : (r[B_ENABLED] & ~BIT_ENABLED);
+  }
+  if (lodHigh !== undefined) {
+    r[B_LOD] = lodHigh ? (r[B_LOD] | BIT_LOD_HIGH) : (r[B_LOD] & ~BIT_LOD_HIGH);
+  }
+  if (dpi !== undefined) {
+    const raw = dpiToRaw(dpi);
+    r[B_DPI_X] = raw & 0xff; r[B_DPI_X + 1] = (raw >> 8) & 0xff;
+    r[B_DPI_Y] = raw & 0xff; r[B_DPI_Y + 1] = (raw >> 8) & 0xff;
+  }
+}
+
+// The full 17-packet transaction MasterPlus runs for every change.
+async function applyAll() {
+  await xfer(pkt(0x41, 0x80));
+  await xfer(pkt(OP_GET));
+  await xfer(pkt(0x41, 0x80));
+
+  for (let i = 0; i < STAGES; i++) {
+    const w = stageRaw[i].slice();
+    w[0] = OP_SET;   // flip the read record into a write
+    w[4] = 0x00;     // host always sends 0 here; the device fills it in
+    await xfer(w);
+  }
+
+  const b = state.block9c ? state.block9c.slice() : pkt(...BLOCK_9C_FALLBACK);
+  b[0] = OP_SET;
+  await xfer(b);
+
+  await xfer(pkt(OP_SET, SUB_DPI, 0x00, SEL_ACTIVE, state.active, state.stageCount));
+  await xfer(pkt(OP_SET, SUB_POLL, 0x00, 0x00, state.polling));
+  await xfer(pkt(OP_GET, SUB_STATUS));
+  await commit();
+}
+
+// Minimal path: change which stage is live, nothing else.
+async function switchStageOnly(stage) {
+  await xfer(pkt(0x41, 0x80));
+  await xfer(pkt(OP_SET, SUB_DPI, 0x00, SEL_ACTIVE, stage, state.stageCount));
+  await commit();
+}
+
+async function commit() {
+  await xfer(pkt(0x41, 0x01));
+  await xfer(pkt(0x50, 0x55));   // save to flash
+  await xfer(pkt(0x41));
+}
+
+// RGB has its own apply shape, captured separately from the DPI/polling one:
+// a fresh 0x41 80 ping directly in front of each write, not just once at the
+// top. Off skips the parameter write entirely - confirmed in
+// captures/mm712-wired-rgb-from-breathing-to-off.pcapng and
+// rgb-from-breathing-to-static.pcapng.
+async function applyRgb() {
+  await xfer(pkt(0x41, 0x80));
+  await xfer(pkt(OP_GET));
+  await xfer(pkt(0x41, 0x80));
+
+  if (rgbActive !== RGB_EFFECT_OFF) {
+    const p = rgbParamsFor(rgbActive);
+    await xfer(pkt(OP_SET, SUB_RGB_PARAMS, 0x00, 0x00, rgbActive,
+      p.speed, p.byte6, 0xff, 0xff, p.brightness, p.r, p.g, p.b));
+    rgbParams[rgbActive] = p;   // keep the cache in sync with what we just sent
+    await xfer(pkt(0x41, 0x80));
+  }
+
+  await xfer(pkt(OP_SET, SUB_RGB_EFFECT, 0x00, 0x00, rgbActive));
+  await commit();
+}
+
+/* ---------- UI ---------- */
+
+const $ = id => document.getElementById(id);
+const logEl = $('log');
+
+function hexDump(bytes) {
+  let last = -1;
+  for (let i = 0; i < bytes.length; i++) if (bytes[i] !== 0) last = i;
+  const shown = Array.from(bytes.slice(0, last + 1), b => b.toString(16).padStart(2, '0'));
+  return shown.length ? shown.join(' ') : '(all zero)';
+}
+
+function log(dir, bytes) {
+  const line = document.createElement('div');
+  const marker = { out: '>> ', in: '<< ', async: '~~ ' }[dir];
+  line.className = dir === 'async' ? 'note' : dir;
+  line.textContent = marker + hexDump(bytes);
+  logEl.append(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function note(text, cls = 'note') {
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = '-- ' + text;
+  logEl.append(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(text, kind = '') {
+  $('status').className = 'status ' + kind;
+  $('statusText').textContent = text;
+}
+
+function busy(on) {
+  for (const b of ['connect', 'reload', 'apply', 'switch', 'applyRgbBtn']) $(b).disabled = on || (b !== 'connect' && !device);
+}
+
+function renderStages() {
+  const tb = $('stages');
+  tb.replaceChildren();
+
+  for (let i = 0; i < STAGES; i++) {
+    const v = stageView(i);
+    const tr = document.createElement('tr');
+    if (i === state.active) tr.className = 'active';
+
+    const active = document.createElement('input');
+    active.type = 'radio'; active.name = 'active'; active.checked = i === state.active;
+    active.addEventListener('change', () => { state.active = i; renderStages(); });
+
+    const on = document.createElement('input');
+    on.type = 'checkbox'; on.checked = v.enabled;
+
+    const dpi = document.createElement('input');
+    dpi.type = 'number';
+    dpi.min = DPI_MIN; dpi.max = DPI_MAX; dpi.step = DPI_STEP;
+    dpi.value = v.dpi; dpi.disabled = !v.enabled;
+
+    const rawCell = document.createElement('td');
+    rawCell.className = 'raw mono';
+    const showRaw = () => {
+      const r = stageRaw[i];
+      rawCell.textContent = `${r[B_DPI_X].toString(16).padStart(2, '0')} ${r[B_DPI_X + 1].toString(16).padStart(2, '0')}`;
+    };
+    showRaw();
+
+    on.addEventListener('change', () => {
+      patchStage(i, { enabled: on.checked });
+      dpi.disabled = !on.checked;
+    });
+
+    dpi.addEventListener('change', () => {
+      let d = Math.round(Number(dpi.value) / DPI_STEP) * DPI_STEP;
+      d = Math.min(DPI_MAX, Math.max(DPI_MIN, d || DPI_MIN));
+      dpi.value = d;
+      patchStage(i, { dpi: d });
+      showRaw();
+    });
+
+    const cells = [active, on, document.createTextNode(`Stage ${i}`), dpi];
+    cells.forEach(c => { const td = document.createElement('td'); td.append(c); tr.append(td); });
+    tr.append(rawCell);
+    tb.append(tr);
+  }
+}
+
+function renderOptions() {
+  for (const r of document.querySelectorAll('input[name=poll]')) r.checked = Number(r.value) === state.polling;
+  for (const r of document.querySelectorAll('input[name=lod]'))  r.checked = Number(r.value) === (state.lodHigh ? 1 : 0);
+}
+
+document.querySelectorAll('input[name=poll]').forEach(r =>
+  r.addEventListener('change', () => { if (r.checked) state.polling = Number(r.value); }));
+
+document.querySelectorAll('input[name=lod]').forEach(r =>
+  r.addEventListener('change', () => {
+    if (!r.checked) return;
+    state.lodHigh = r.value === '1';
+    for (let i = 0; i < STAGES; i++) patchStage(i, { lodHigh: state.lodHigh });  // LOD lives in every stage record
+  }));
+
+$('rgbEffect').addEventListener('change', () => {
+  rgbActive = Number($('rgbEffect').value);
+  renderRgb();
+});
+
+$('rgbSpeedLevel').addEventListener('change', () => {
+  patchRgbParams({ speed: RGB_SPEED_LEVELS[Number($('rgbSpeedLevel').value)] });
+});
+
+$('rgbBrightness').addEventListener('input', () => {
+  const v = Number($('rgbBrightness').value);
+  $('rgbBrightnessVal').textContent = Math.round(v / 255 * 100) + '%';
+  patchRgbParams({ brightness: v });
+});
+
+$('rgbColor').addEventListener('input', () => {
+  const hex = $('rgbColor').value; // #rrggbb
+  patchRgbParams({
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  });
+});
+
+function rgbHex(p) {
+  const h = n => n.toString(16).padStart(2, '0');
+  return `#${h(p.r)}${h(p.g)}${h(p.b)}`;
+}
+
+// Breathing's speed byte is decoded as 5 discrete levels; this maps a raw
+// value back to the nearest one, for display when a cached record's byte
+// doesn't land exactly on one of the 5 known values.
+function nearestSpeedLevel(raw) {
+  let best = 3, bestDiff = Infinity;
+  for (const [level, val] of Object.entries(RGB_SPEED_LEVELS)) {
+    const diff = Math.abs(val - raw);
+    if (diff < bestDiff) { bestDiff = diff; best = Number(level); }
+  }
+  return best;
+}
+
+function patchRgbParams(patch) {
+  rgbParams[rgbActive] = { ...rgbParamsFor(rgbActive), ...patch };
+}
+
+function renderRgb() {
+  $('rgbEffect').value = String(rgbActive);
+
+  const hasParams = RGB_PARAM_EFFECTS.includes(rgbActive);
+  const isBreathing = rgbActive === 0x01;
+
+  $('rgbSpeedLevelField').classList.toggle('hide', !(hasParams && isBreathing));
+  $('rgbBrightness').disabled = !hasParams;
+  $('rgbColor').disabled = !hasParams;
+
+  if (hasParams) {
+    const p = rgbParamsFor(rgbActive);
+    if (isBreathing) $('rgbSpeedLevel').value = String(nearestSpeedLevel(p.speed));
+    $('rgbBrightness').value = p.brightness;
+    $('rgbBrightnessVal').textContent = Math.round(p.brightness / 255 * 100) + '%';
+    $('rgbColor').value = rgbHex(p);
+    $('rgbDisabledNote').classList.add('hide');
+  } else {
+    $('rgbDisabledNote').textContent = 'Off has no parameters.';
+    $('rgbDisabledNote').classList.remove('hide');
+  }
+}
+
+function renderAll() {
+  renderStages();
+  renderOptions();
+  renderRgb();
+  $('ui').classList.remove('hide');
+}
+
+async function withBusy(label, fn) {
+  busy(true);
+  setStatus(label);
+  try {
+    await fn();
+    setStatus('Connected', 'on');
+    return true;
+  } catch (err) {
+    note(err.message, 'err');
+    setStatus(err.message, 'err');
+    return false;
+  } finally {
+    busy(false);
+  }
+}
+
+/* ---------- wiring ---------- */
+
+$('connect').addEventListener('click', async () => {
+  try {
+    const picked = await navigator.hid.requestDevice({ filters: [{ vendorId: VID, productId: PID }] });
+    const granted = (await navigator.hid.getDevices()).filter(d => d.vendorId === VID && d.productId === PID);
+    const found = findEndpoint([...new Set([...picked, ...granted])]);
+
+    if (!found) {
+      setStatus('No usable 64-byte interface found', 'err');
+      note('No collection exposed a 64-byte input/output report pair.', 'err');
+      return;
+    }
+
+    if (device) { device.removeEventListener('inputreport', onInputReport); await device.close().catch(() => {}); }
+
+    device = found.dev;
+    reportId = found.reportId;
+    device.addEventListener('inputreport', onInputReport);
+    if (!device.opened) await device.open();
+
+    $('devName').textContent = `${device.productName || 'MM712'} - report id ${reportId}`;
+    note(`connected to "${device.productName || 'MM712'}", report id ${reportId}`);
+
+    await withBusy('Reading...', async () => { await readAll(); renderAll(); });
+  } catch (err) {
+    setStatus(err.message, 'err');
+    note(err.message, 'err');
+  }
+});
+
+$('reload').addEventListener('click', () =>
+  withBusy('Reading...', async () => { await readAll(); renderAll(); }));
+
+$('apply').addEventListener('click', async () => {
+  note('writing all settings (17-packet apply transaction)');
+  const ok = await withBusy('Writing...', applyAll);
+  if (ok) $('applyNote').textContent = 'Written and saved at ' + new Date().toLocaleTimeString();
+});
+
+$('switch').addEventListener('click', async () => {
+  note(`switching active stage to ${state.active} (minimal sequence)`);
+  const ok = await withBusy('Switching...', () => switchStageOnly(state.active));
+  if (ok) $('applyNote').textContent = `Active stage set to ${state.active} at ` + new Date().toLocaleTimeString();
+});
+
+$('applyRgbBtn').addEventListener('click', async () => {
+  const name = RGB_EFFECTS.find(e => e.id === rgbActive)?.name || rgbActive.toString(16);
+  note(`writing RGB (effect: ${name})`);
+  const ok = await withBusy('Writing RGB...', applyRgb);
+  if (ok) $('rgbNote').textContent = `${name} written and saved at ` + new Date().toLocaleTimeString();
+});
+
+$('clearLog').addEventListener('click', () => logEl.replaceChildren());
+
+if (!('hid' in navigator)) {
+  $('unsupported').classList.remove('hide');
+  $('connect').disabled = true;
+} else {
+  navigator.hid.addEventListener('disconnect', ev => {
+    if (ev.device === device) {
+      device = null;
+      $('ui').classList.add('hide');
+      $('devName').textContent = '';
+      busy(false);
+      setStatus('Disconnected', 'err');
+      note('device disconnected');
+    }
+  });
+}
+</script>
+</body>
+</html>

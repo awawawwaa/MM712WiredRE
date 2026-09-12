@@ -1,0 +1,5 @@
+# Raw USB captures - large binary files, not meant for the repo
+/captures/
+
+# Claude Code local session config
+.claude/
